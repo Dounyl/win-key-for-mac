@@ -11,6 +11,7 @@ final class SettingsModel: ObservableObject {
     @Published var navigation = false
     @Published var appSwitch = true
     @Published var inputSwitch = false
+    @Published var shiftInputSwitch = true
     @Published var restoredModifiers = false
     @Published var accessibility = false
     @Published var running = false
@@ -48,6 +49,7 @@ final class SettingsModel: ObservableObject {
         navigation = savedBool("navigation", default: false)
         appSwitch = savedBool("appSwitch", default: true)
         inputSwitch = savedBool("inputSwitch", default: false)
+        shiftInputSwitch = savedBool("shiftInputSwitch", default: true)
         restoredModifiers = defaults.bool(forKey: "restoredModifiers")
         exclusions = defaults.dictionary(forKey: "exclusions") as? [String: String] ?? [
             "com.apple.Terminal": "终端", "com.googlecode.iterm2": "iTerm2",
@@ -66,7 +68,7 @@ final class SettingsModel: ObservableObject {
             self.onChange?()
         }
         monitor.inputRequested = { [weak self] in
-            if let error = InputSources.selectNext() { self?.message = error }
+            if let error = InputSources.toggleChineseEnglish() { self?.message = error }
         }
         refreshFrontApp()
         let center = NSWorkspace.shared.notificationCenter
@@ -109,6 +111,7 @@ final class SettingsModel: ObservableObject {
     func saveRules() {
         for (key, value) in [("common", common), ("browser", browser), ("navigation", navigation),
                              ("appSwitch", appSwitch), ("inputSwitch", inputSwitch),
+                             ("shiftInputSwitch", shiftInputSwitch),
                              ("restoredModifiers", restoredModifiers)] { defaults.set(value, forKey: key) }
         if !restoredModifiers && enabled { setEnabled(false) }
         syncMonitor()
@@ -150,8 +153,8 @@ final class SettingsModel: ObservableObject {
     private func syncMonitor() {
         monitor.update(MonitorSnapshot(
             options: ShortcutOptions(common: common, browser: browser, navigation: navigation,
-                                     appSwitch: appSwitch, inputSwitch: inputSwitch),
-            enabled: enabled, excluded: excluded, suspended: secureInput || !accessibility))
+                                     appSwitch: appSwitch, inputSwitch: inputSwitch, shiftInputSwitch: shiftInputSwitch),
+            enabled: enabled, excluded: excluded, suspended: secureInput || !accessibility, frontAppID: frontID))
     }
 
     func excludeCurrent() {
@@ -219,7 +222,7 @@ struct SettingsView: View {
                         Text("熟悉的快捷键，带到 Mac。").font(.system(size: 14)).foregroundStyle(.secondary)
                     }
                     Spacer()
-                    Text("试用版 0.2.1").font(.caption).foregroundStyle(.secondary)
+                    Text("试用版 0.3.0").font(.caption).foregroundStyle(.secondary)
                 }
 
                 card {
@@ -277,7 +280,11 @@ struct SettingsView: View {
                     Divider()
                     ruleToggle("切换应用", detail: "Alt（Option）+Tab；加 Shift 反向切换，松开 Alt 确认", value: $model.appSwitch)
                     Divider()
-                    ruleToggle("切换输入法", detail: "Ctrl+空格 · 在系统已启用的输入法间切换", value: $model.inputSwitch)
+                    ruleToggle("Shift 切换中英文", detail: "单按并松开左 / 右 Shift；组合键、鼠标操作和长按不触发", value: $model.shiftInputSwitch)
+                    Divider()
+                    ruleToggle("Ctrl+空格切换中英文", detail: "保留 Ctrl+空格；与 Shift 使用同一组中文和英文 / ABC 输入法", value: $model.inputSwitch)
+                    Text("Caps Lock 用于切换大小写。请在系统键盘设置中关闭“使用大写锁定键切换 ABC 输入法”。")
+                        .font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
                     Divider()
                     ruleToggle("按词移动与删除", detail: "Ctrl+← / → / Backspace；Ctrl+Home / End 到文首或文尾", value: $model.navigation)
                     Text("替换模式：仅保留列出的 Windows 手势，对应的 Command 组合会被禁用。暂停或进入例外应用后恢复；其他快捷键保持原样。")

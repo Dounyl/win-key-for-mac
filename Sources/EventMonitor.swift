@@ -7,11 +7,13 @@ struct MonitorSnapshot {
     var enabled = false
     var excluded = false
     var suspended = false
+    var frontAppID = ""
 }
 
 /// Owns one event-tap thread inside the app; no helper process or driver.
 final class EventMonitor {
     static let syntheticTag: Int64 = 0x57494E4B455953
+    private static let pointerEvents: [CGEventType] = [.leftMouseDown, .rightMouseDown, .otherMouseDown, .scrollWheel]
     private let lock = NSLock()
     private var snapshot = MonitorSnapshot()
     private var worker: Thread?
@@ -34,12 +36,16 @@ final class EventMonitor {
         let mustRelease = (snapshot.enabled && !value.enabled) ||
                           (!snapshot.suspended && value.suspended) ||
                           (snapshot.options.appSwitch && !value.options.appSwitch)
+        let cancelShift = snapshot.enabled != value.enabled || snapshot.excluded != value.excluded ||
+            snapshot.suspended != value.suspended || snapshot.frontAppID != value.frontAppID ||
+            snapshot.options.shiftInputSwitch != value.options.shiftInputSwitch
         snapshot = value
         let currentLoop = loop
         lock.unlock()
-        if mustRelease, let currentLoop {
+        if mustRelease || cancelShift, let currentLoop {
             CFRunLoopPerformBlock(currentLoop, CFRunLoopMode.commonModes.rawValue) { [weak self] in
-                self?.releaseHeldCommand(clearMappings: false)
+                if mustRelease { self?.releaseHeldCommand(clearMappings: false) }
+                if cancelShift { self?.engine.cancelShiftTap() }
             }
             CFRunLoopWakeUp(currentLoop)
         }
@@ -89,7 +95,7 @@ final class EventMonitor {
 
     private func run() {
         autoreleasepool {
-            let mask = [CGEventType.keyDown, .keyUp, .flagsChanged].reduce(CGEventMask(0)) {
+            let mask = ([CGEventType.keyDown, .keyUp, .flagsChanged] + Self.pointerEvents).reduce(CGEventMask(0)) {
                 $0 | (CGEventMask(1) << $1.rawValue)
             }
             let callback: CGEventTapCallBack = { proxy, type, event, context in
@@ -164,11 +170,16 @@ final class EventMonitor {
         if event.getIntegerValueField(.eventSourceUserData) == Self.syntheticTag {
             return Unmanaged.passUnretained(event)
         }
+        if Self.pointerEvents.contains(type) {
+            engine.cancelShiftTap()
+            return Unmanaged.passUnretained(event)
+        }
         lock.lock(); let current = snapshot; lock.unlock()
         let phase: KeyPhase = type == .flagsChanged ? .flags : (type == .keyUp ? .up : .down)
         let input = KeyInput(code: UInt16(event.getIntegerValueField(.keyboardEventKeycode)),
                              phase: phase, modifiers: Modifiers(rawValue: event.flags.rawValue),
-                             repeatKey: event.getIntegerValueField(.keyboardEventAutorepeat) != 0)
+                             repeatKey: event.getIntegerValueField(.keyboardEventAutorepeat) != 0,
+                             timestamp: event.timestamp)
         // No app enumeration or UI calls inside the event callback.
         let decision = engine.process(input, options: current.options,
             active: current.enabled && !current.excluded && !current.suspended)
@@ -176,7 +187,13 @@ final class EventMonitor {
             postCommand(down: down, flags: decision.modifiers, proxy: proxy)
         }
         if decision.switchInput {
-            DispatchQueue.main.async { [weak self] in self?.inputRequested?() }
+            DispatchQueue.main.async { [weak self] in
+                guard let self else { return }
+                self.lock.lock(); let latest = self.snapshot; self.lock.unlock()
+                guard latest.enabled && !latest.excluded && !latest.suspended,
+                      latest.frontAppID == current.frontAppID else { return }
+                self.inputRequested?()
+            }
         }
         if decision.consume { return nil }
         if decision.code != input.code {
@@ -212,23 +229,47 @@ final class EventMonitor {
 }
 
 enum InputSources {
-    static func selectNext() -> String? {
+    static func toggleChineseEnglish() -> String? {
         let filter = [kTISPropertyInputSourceCategory as String: kTISCategoryKeyboardInputSource as Any,
-                      kTISPropertyInputSourceIsSelectCapable as String: true] as CFDictionary
+                      kTISPropertyInputSourceIsSelectCapable as String: true,
+                      kTISPropertyInputSourceIsEnabled as String: true] as CFDictionary
         guard let unmanaged = TISCreateInputSourceList(filter, false) else {
             return "读取输入法失败，请检查系统输入法设置。"
         }
         let sources = unmanaged.takeRetainedValue() as! [TISInputSource]
-        guard sources.count > 1 else { return "至少启用两种系统输入法才能切换。" }
         guard let current = TISCopyCurrentKeyboardInputSource()?.takeRetainedValue() else {
             return "无法读取当前输入法。"
         }
-        func id(_ source: TISInputSource) -> String {
-            guard let value = TISGetInputSourceProperty(source, kTISPropertyInputSourceID) else { return "" }
+        func string(_ source: TISInputSource, _ key: CFString) -> String {
+            guard let value = TISGetInputSourceProperty(source, key) else { return "" }
             return Unmanaged<CFString>.fromOpaque(value).takeUnretainedValue() as String
         }
-        let index = sources.firstIndex { id($0) == id(current) } ?? -1
-        let next = sources[(index + 1) % sources.count]
-        return TISSelectInputSource(next) == noErr ? nil : "输入法切换失败，请使用原来的系统切换键。"
+        func descriptor(_ source: TISInputSource) -> InputSourceDescriptor {
+            var languages: [String] = []
+            if let value = TISGetInputSourceProperty(source, kTISPropertyInputSourceLanguages) {
+                languages = Unmanaged<CFArray>.fromOpaque(value).takeUnretainedValue() as? [String] ?? []
+            }
+            let ascii = TISGetInputSourceProperty(source, kTISPropertyInputSourceIsASCIICapable).map {
+                CFBooleanGetValue(Unmanaged<CFBoolean>.fromOpaque($0).takeUnretainedValue())
+            } ?? false
+            return InputSourceDescriptor(id: string(source, kTISPropertyInputSourceID), languages: languages,
+                isKeyboardLayout: string(source, kTISPropertyInputSourceType) == kTISTypeKeyboardLayout as String,
+                isASCIICapable: ascii)
+        }
+        let defaults = UserDefaults.standard
+        let currentDescriptor = descriptor(current)
+        let chineseKey = "lastChineseInputSource"
+        let englishKey = "lastEnglishInputSource"
+        if currentDescriptor.isChinese { defaults.set(currentDescriptor.id, forKey: chineseKey) }
+        if currentDescriptor.isEnglish { defaults.set(currentDescriptor.id, forKey: englishKey) }
+        guard let targetID = InputSourceSelection.targetID(currentID: currentDescriptor.id,
+            available: sources.map(descriptor), lastChineseID: defaults.string(forKey: chineseKey),
+            lastEnglishID: defaults.string(forKey: englishKey)),
+            let target = sources.first(where: { string($0, kTISPropertyInputSourceID) == targetID }) else {
+            return "请在系统键盘设置中同时启用中文输入法和英文 / ABC 输入法。"
+        }
+        guard TISSelectInputSource(target) == noErr else { return "中英文切换失败，请检查系统输入法设置。" }
+        defaults.set(targetID, forKey: descriptor(target).isChinese ? chineseKey : englishKey)
+        return nil
     }
 }

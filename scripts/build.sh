@@ -9,6 +9,7 @@ swiftc -swift-version 5 -parse-as-library -O \
   -target "$(uname -m)-apple-macos13.0" \
   -module-cache-path "$build_dir/module-cache" \
   "$project_dir/Sources/ShortcutEngine.swift" \
+  "$project_dir/Sources/InputSourceSelection.swift" \
   "$project_dir/Sources/EventMonitor.swift" "$project_dir/Sources/WinKeyForMac.swift" \
   -framework AppKit -framework SwiftUI -framework ApplicationServices \
   -framework Carbon -framework ServiceManagement \

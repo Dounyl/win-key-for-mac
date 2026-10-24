@@ -6,6 +6,7 @@ struct Modifiers: OptionSet, Equatable {
     static let control = Modifiers(rawValue: 1 << 18)
     static let option = Modifiers(rawValue: 1 << 19)
     static let command = Modifiers(rawValue: 1 << 20)
+    static let function = Modifiers(rawValue: 1 << 23)
     static let relevant: Modifiers = [.shift, .control, .option, .command]
 }
 
@@ -16,6 +17,7 @@ struct KeyInput {
     var phase: KeyPhase
     var modifiers: Modifiers
     var repeatKey = false
+    var timestamp: UInt64 = 0
 }
 
 struct ShortcutOptions {
@@ -24,6 +26,7 @@ struct ShortcutOptions {
     var navigation = false
     var appSwitch = true
     var inputSwitch = false
+    var shiftInputSwitch = true
 }
 
 struct KeyDecision {
@@ -77,6 +80,9 @@ final class ShortcutEngine {
         let consume: Bool
     }
     private var pressed: [UInt16: PressedMapping] = [:]
+    private var heldKeys: Set<UInt16> = []
+    private var shiftWasDown = false
+    private var shiftTap: (code: UInt16, timestamp: UInt64)?
     private(set) var switchingApps = false
 
     var hasHeldMappings: Bool { !pressed.isEmpty || switchingApps }
@@ -88,18 +94,24 @@ final class ShortcutEngine {
         return release
     }
 
+    func cancelShiftTap() { shiftTap = nil }
+
     /// Returns whether a synthetic Command release is required by the adapter.
     @discardableResult
     func reset() -> Bool {
         let release = finishAppSwitch()
         // Key-up pairing survives foreground changes via process(), rather than reset().
         pressed.removeAll()
+        heldKeys.removeAll()
+        shiftWasDown = false
+        cancelShiftTap()
         return release
     }
 
     func process(_ key: KeyInput, options: ShortcutOptions, active: Bool) -> KeyDecision {
         var result = KeyDecision(code: key.code, modifiers: key.modifiers)
         let relevant = key.modifiers.intersection(.relevant)
+        result.switchInput = trackShiftTap(key, options: options, active: active)
 
         if switchingApps, key.modifiers.contains(.option) {
             result.modifiers.remove(.option)
@@ -176,6 +188,43 @@ final class ShortcutEngine {
             return mapped(key, to: rule.targetCode, replacement: rule.targetModifiers)
         }
         return result
+    }
+
+    private func trackShiftTap(_ key: KeyInput, options: ShortcutOptions, active: Bool) -> Bool {
+        let shiftDown = key.modifiers.contains(.shift)
+        defer { shiftWasDown = shiftDown }
+        if !active || !options.shiftInputSwitch { cancelShiftTap() }
+
+        if key.phase != .flags {
+            if key.phase == .down { heldKeys.insert(key.code) }
+            else { heldKeys.remove(key.code) }
+            cancelShiftTap()
+            return false
+        }
+
+        guard key.code == 56 || key.code == 60 else {
+            cancelShiftTap()
+            return false
+        }
+        let modifiers = key.modifiers.intersection(Modifiers.relevant.union(.function))
+        if shiftDown && !shiftWasDown {
+            if active && options.shiftInputSwitch && modifiers == .shift && heldKeys.isEmpty {
+                shiftTap = (key.code, key.timestamp)
+            }
+            return false
+        }
+        if !shiftDown && shiftWasDown {
+            let tap = shiftTap
+            cancelShiftTap()
+            // CGEvent timestamps are monotonic nanoseconds. Long holds are ordinary Shift.
+            return active && options.shiftInputSwitch && modifiers.isEmpty &&
+                tap?.code == key.code && tap.map {
+                    key.timestamp >= $0.timestamp && key.timestamp - $0.timestamp <= 500_000_000
+                } == true
+        }
+        // Two Shift keys together are a chord, even while the aggregate Shift flag stays set.
+        cancelShiftTap()
+        return false
     }
 
     private func mapped(_ key: KeyInput, to code: UInt16, replacement: Modifiers) -> KeyDecision {
