@@ -17,7 +17,7 @@ final class SettingsModel: ObservableObject {
     @Published var secureInput = false
     @Published var frontName = ""
     @Published var frontID = ""
-    @Published var message = "完成下方首次设置，即可启用。"
+    @Published var message = ""
     @Published var exclusions: [String: String] = [:]
     @Published var launchAtLogin = false
 
@@ -30,7 +30,7 @@ final class SettingsModel: ObservableObject {
     var excluded: Bool { exclusions[frontID] != nil }
     var canEnable: Bool { restoredModifiers && accessibility }
     var statusTitle: String {
-        if !enabled { return canEnable ? "已暂停" : "首次设置" }
+        if !enabled { return canEnable ? "已暂停" : "未启用" }
         if !accessibility { return "需要辅助功能权限" }
         if reportedFailure { return "需要检查" }
         if secureInput { return "安全输入期间暂停" }
@@ -219,19 +219,21 @@ struct SettingsView: View {
                         Text("熟悉的快捷键，带到 Mac。").font(.system(size: 14)).foregroundStyle(.secondary)
                     }
                     Spacer()
-                    Text("试用版 0.2.0").font(.caption).foregroundStyle(.secondary)
+                    Text("试用版 0.2.1").font(.caption).foregroundStyle(.secondary)
                 }
 
                 card {
                     HStack(alignment: .center) {
                         Circle().fill(model.statusColor).frame(width: 10, height: 10)
                         VStack(alignment: .leading, spacing: 5) {
-                            Text(model.statusTitle).font(.headline)
-                            Text(model.message).font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+                            Text(model.enabled ? model.statusTitle : "启用").font(.headline)
+                            if !model.message.isEmpty {
+                                Text(model.message).font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+                            }
                         }
                         Spacer(minLength: 12)
-                        Toggle("启用 Windows 快捷键", isOn: Binding(get: { model.enabled }, set: { model.setEnabled($0) }))
-                            .toggleStyle(.switch).labelsHidden().accessibilityLabel("启用 Windows 快捷键")
+                        Toggle("启用", isOn: Binding(get: { model.enabled }, set: { model.setEnabled($0) }))
+                            .toggleStyle(.switch).labelsHidden().accessibilityLabel("启用")
                     }
                     if model.enabled && !model.running {
                         Button("重新检查并启用") { model.retry() }
