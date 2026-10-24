@@ -12,7 +12,6 @@ struct MonitorSnapshot {
 
 /// Owns one event-tap thread inside the app; no helper process or driver.
 final class EventMonitor {
-    static let syntheticTag: Int64 = 0x57494E4B455953
     private static let pointerEvents: [CGEventType] = [.leftMouseDown, .rightMouseDown, .otherMouseDown, .scrollWheel]
     private let lock = NSLock()
     private var snapshot = MonitorSnapshot()
@@ -33,19 +32,15 @@ final class EventMonitor {
 
     func update(_ value: MonitorSnapshot) {
         lock.lock()
-        let mustRelease = (snapshot.enabled && !value.enabled) ||
-                          (!snapshot.suspended && value.suspended) ||
-                          (snapshot.options.appSwitch && !value.options.appSwitch)
         let cancelShift = snapshot.enabled != value.enabled || snapshot.excluded != value.excluded ||
             snapshot.suspended != value.suspended || snapshot.frontAppID != value.frontAppID ||
             snapshot.options.shiftInputSwitch != value.options.shiftInputSwitch
         snapshot = value
         let currentLoop = loop
         lock.unlock()
-        if mustRelease || cancelShift, let currentLoop {
+        if cancelShift, let currentLoop {
             CFRunLoopPerformBlock(currentLoop, CFRunLoopMode.commonModes.rawValue) { [weak self] in
-                if mustRelease { self?.releaseHeldCommand(clearMappings: false) }
-                if cancelShift { self?.engine.cancelShiftTap() }
+                self?.engine.cancelShiftTap()
             }
             CFRunLoopWakeUp(currentLoop)
         }
@@ -70,7 +65,7 @@ final class EventMonitor {
         lock.unlock()
         if let currentLoop {
             CFRunLoopPerformBlock(currentLoop, CFRunLoopMode.commonModes.rawValue) { [weak self] in
-                self?.releaseHeldCommand()
+                self?.engine.reset()
                 CFRunLoopStop(currentLoop)
             }
             CFRunLoopWakeUp(currentLoop)
@@ -130,7 +125,7 @@ final class EventMonitor {
             recoveryTimes.removeAll()
             emit("键盘监听运行中", ok: true)
             if !shouldStop { CFRunLoopRun() }
-            releaseHeldCommand()
+            engine.reset()
             CGEvent.tapEnable(tap: eventTap, enable: false)
             CFRunLoopRemoveSource(currentLoop, source, .commonModes)
             CFMachPortInvalidate(eventTap)
@@ -142,7 +137,7 @@ final class EventMonitor {
 
     private func recover(reason: String) {
         guard let tap else { return }
-        releaseHeldCommand()
+        engine.reset()
         let now = Date.timeIntervalSinceReferenceDate
         recoveryTimes = recoveryTimes.filter { now - $0 < 60 }
         guard recoveryTimes.count < 3 else {
@@ -162,12 +157,9 @@ final class EventMonitor {
         }
         if type == .tapDisabledByUserInput {
             // Respect the system/user disabling a tap; do not fight repeated disable requests.
-            releaseHeldCommand()
+            engine.reset()
             emit("监听被系统暂停，请手动重新启用。", ok: false)
             CFRunLoopStop(CFRunLoopGetCurrent())
-            return Unmanaged.passUnretained(event)
-        }
-        if event.getIntegerValueField(.eventSourceUserData) == Self.syntheticTag {
             return Unmanaged.passUnretained(event)
         }
         if Self.pointerEvents.contains(type) {
@@ -183,9 +175,6 @@ final class EventMonitor {
         // No app enumeration or UI calls inside the event callback.
         let decision = engine.process(input, options: current.options,
             active: current.enabled && !current.excluded && !current.suspended)
-        if let down = decision.commandTransition {
-            postCommand(down: down, flags: decision.modifiers, proxy: proxy)
-        }
         if decision.switchInput {
             DispatchQueue.main.async { [weak self] in
                 guard let self else { return }
@@ -196,36 +185,41 @@ final class EventMonitor {
             }
         }
         if decision.consume { return nil }
+        Self.apply(decision, to: event, input: input)
+        return Unmanaged.passUnretained(event)
+    }
+
+    static func apply(_ decision: KeyDecision, to event: CGEvent, input: KeyInput) {
         if decision.code != input.code {
             event.setIntegerValueField(.keyboardEventKeycode, value: Int64(decision.code))
         }
         if decision.modifiers != input.modifiers {
             event.flags = normalizedFlags(decision.modifiers)
         }
-        return Unmanaged.passUnretained(event)
+        // Some clients use the event's cached text rather than translating its new flags.
+        // Keep that text consistent when Caps Lock is suppressed, preserving Shift and chords.
+        if input.modifiers.contains(.capsLock), !decision.modifiers.contains(.capsLock),
+           decision.modifiers.intersection(.relevant).isEmpty,
+           input.code == decision.code, input.phase == .down || input.phase == .up {
+            var length = 0
+            event.keyboardGetUnicodeString(maxStringLength: 0, actualStringLength: &length, unicodeString: nil)
+            if length > 0 {
+                var characters = [UniChar](repeating: 0, count: length)
+                event.keyboardGetUnicodeString(maxStringLength: length, actualStringLength: &length,
+                                               unicodeString: &characters)
+                let lowercase = Array(String(utf16CodeUnits: characters, count: length).lowercased().utf16)
+                lowercase.withUnsafeBufferPointer {
+                    event.keyboardSetUnicodeString(stringLength: $0.count, unicodeString: $0.baseAddress)
+                }
+            }
+        }
     }
 
-    private func postCommand(down: Bool, flags: Modifiers, proxy: CGEventTapProxy? = nil) {
-        guard let event = CGEvent(keyboardEventSource: nil, virtualKey: 55, keyDown: down) else { return }
-        event.type = .flagsChanged
-        event.flags = normalizedFlags(flags)
-        event.setIntegerValueField(.eventSourceUserData, value: Self.syntheticTag)
-        if let proxy { event.tapPostEvent(proxy) }
-        else { event.post(tap: .cgSessionEventTap) }
-    }
-
-    private func normalizedFlags(_ flags: Modifiers) -> CGEventFlags {
+    private static func normalizedFlags(_ flags: Modifiers) -> CGEventFlags {
         // NX device-side Ctrl/Option/Command bits must not contradict the new generic flags.
         CGEventFlags(rawValue: flags.rawValue & ~UInt64(0x2079))
     }
 
-    private func releaseHeldCommand(clearMappings: Bool = true) {
-        if clearMappings ? engine.reset() : engine.finishAppSwitch() {
-            var flags = Modifiers(rawValue: CGEventSource.flagsState(.hidSystemState).rawValue)
-            flags.remove(.command)
-            postCommand(down: false, flags: flags)
-        }
-    }
 }
 
 enum InputSources {

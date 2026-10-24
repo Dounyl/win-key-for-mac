@@ -1,81 +1,73 @@
 # WinKeyForMac
 
-把熟悉的 Windows 快捷键带到 Mac。中文菜单栏应用，按组合键精确替换，无需交换整颗 Control 和 Command。
+把熟悉的 Windows 快捷键带到 Mac。支持 Ctrl 复制粘贴、单按 Shift 切换中英文，保留 Command+Tab 切换应用，提供中文设置界面，常驻菜单栏。
 
-**替换模式**：启用后，`Ctrl+C` 复制，`Ctrl+V` 粘贴，`Ctrl+W` 关闭，`Ctrl+F` 查找；对应的 `Command+C / V / W / F` 被禁用。关闭对应规则、暂停应用或进入例外应用，即恢复原有快捷键。未列出的组合（如 `Command+Q`）保持原样。
+需要 **macOS 13 或更新版本**。
 
-当前版本：**0.3.0**。Swift 原生实现，单进程运行，无驱动或独立辅助服务，无网络请求，不读取剪贴板，不保存输入内容。
+## 开始使用
 
-## 使用
-
-1. 将编译后的 `WinKeyForMac.app` 放到「应用程序」目录并打开。
-2. 若曾交换 Control / Command，在「系统设置 → 键盘 → 键盘快捷键 → 修饰键」中恢复默认。内置和外接键盘需分别检查，然后勾选应用中的确认项。
+1. 将 `WinKeyForMac.app` 拖到「应用程序」文件夹，再打开。
+2. 如果曾经交换过 Control 和 Command，请在「系统设置 → 键盘 → 键盘快捷键 → 修饰键」中恢复默认，并勾选应用中的确认项。内置和外接键盘需要分别检查。
 3. 点击「打开授权设置」，在「隐私与安全性 → 辅助功能」中允许 WinKeyForMac，再返回应用启用快捷键。
-4. 关闭设置窗口后，应用继续运行，右上角保留 **键盘图标＋WK**。点击它可打开设置、暂停或退出。设置窗口打开时显示 Dock 图标。
+4. 按自己的习惯开启或关闭功能组。关闭设置窗口后，应用会继续运行；点击菜单栏的 **键盘图标**，可打开设置、暂停或退出。
+5. 如需开机后自动运行，可在设置中开启「登录启动」。请先将应用放在固定位置。
 
-如果监听启动失败，可从帮助菜单打开「输入监控」检查权限，再点击「重新检查并启用」。登录启动可在设置中开启；启用前请先确定应用位置。
+如果授权后仍无法启用，可从帮助菜单打开「输入监控」检查权限，再点击「重新检查并启用」。
 
-## 支持的组合
+## 有哪些功能
 
-| Windows 手势 | 转换后的 Mac 操作 |
+| 快捷键 | 功能 |
 | --- | --- |
-| Ctrl+C / V / X / A | 复制 / 粘贴 / 剪切 / 全选 |
-| Ctrl+Z / Ctrl+Y / Ctrl+Shift+Z | 撤销 / 重做 / 重做 |
-| Ctrl+W / Ctrl+Shift+W | Command+W / Command+Shift+W |
-| Ctrl+F / Ctrl+Shift+F | Command+F / Command+Shift+F |
-| Ctrl+S / Ctrl+Shift+S | Command+S / Command+Shift+S |
-| Ctrl+N / Ctrl+Shift+N / Ctrl+O / Ctrl+P | Command+N / Command+Shift+N / Command+O / Command+P |
-| Ctrl+T / Ctrl+Shift+T | 新标签页 / 恢复关闭的标签页（取决于应用） |
-| Ctrl+L / Ctrl+R / Ctrl+Shift+R | Command+L / Command+R / Command+Shift+R |
-| Ctrl+1…9 / Ctrl+0 / Ctrl+= / Ctrl+Shift+= / Ctrl+减号 | 对应的 Command 组合，常用于标签切换与缩放 |
-| Alt（Option）+Tab / Alt+Shift+Tab | macOS 应用切换器；按住 Alt 连续切换，松开确认 |
-| 单按左 / 右 Shift（默认开启） | 松开时切换中文与英文 / ABC 输入法 |
-| Ctrl+空格（默认关闭，可与 Shift 同时开启） | 同样切换中文与英文 / ABC 输入法 |
-| Caps Lock | 保留系统的大小写锁定功能，不由应用切换输入法 |
-| Ctrl+左右箭头 / Backspace / Delete（默认关闭） | Option 组合：按词移动或删除；支持 Shift 选择 |
-| Ctrl+Home / End（默认关闭） | Command+上 / 下：文首或文尾；支持 Shift 选择 |
+| Ctrl+C / V / X / A | 复制、粘贴、剪切、全选 |
+| Ctrl+Z / Ctrl+Y / Ctrl+Shift+Z | 撤销、重做 |
+| Ctrl+S / O / P | 保存、打开、打印 |
+| Ctrl+N / W / F，以及对应的 Ctrl+Shift 组合 | 新建、关闭、查找等，具体操作取决于当前应用 |
+| Ctrl+Shift+S | 当前应用的另存为或类似操作 |
+| Ctrl+T / Ctrl+Shift+T | 新建标签页、恢复关闭的标签页 |
+| Ctrl+L / R / Shift+R | 定位地址栏、刷新、强制刷新，取决于当前应用 |
+| Ctrl+数字 / 加号 / 减号 | 切换标签页、缩放等，取决于当前应用 |
+| Command（⌘）+Tab / Command+Shift+Tab | 保留系统应用切换；按住 Command 连续切换，松开确认 |
+| 单按左或右 Shift | 切换中文与英文 / ABC 输入法，默认开启 |
+| Ctrl+空格 | 切换中文与英文 / ABC 输入法，默认关闭 |
+| Caps Lock | 切换大小写，默认开启；可独立关闭大写锁定 |
+| Ctrl+左右箭头 / Backspace / Delete | 按词移动或删除，默认关闭；可配合 Shift 选择文字 |
+| Ctrl+Home / End | 跳到文首或文尾，默认关闭；可配合 Shift 选择文字 |
 
-每组可单独开关。启用某组时，只禁用它对应的 **Command** 组合，包括切换应用组的 Command+Tab / Command+Shift+Tab，以及导航组的 Command+上 / 下。Option 按词导航仍可使用。额外修饰键和未知组合保持原样。切换输入法不会禁用其他系统输入法快捷键。
+**这是快捷键替换工具。** 例如，启用复制粘贴后，Ctrl+C 可以复制，对应的 Command+C 会被禁用。每组功能可单独开关；关闭对应功能、暂停应用或进入例外应用后，会恢复原有快捷键。未涉及的组合键（如 Command+Q）保持原样。
 
-## 中英文与大小写
+Command+Tab / Command+Shift+Tab 始终保留系统行为，切换的是 Mac 应用，不是每个独立窗口。Option+Tab 不转换为应用切换。各应用菜单中显示的快捷键不会随之改变。
 
-单按并在半秒内松开左或右 Shift，可切换中文与英文 / ABC 输入法。Shift+字母仍用于临时大写，Shift+方向键仍用于选区；使用其他按键、另一侧 Shift、鼠标点击或滚轮后，以及长按 Shift，都不会触发切换。切换应用、暂停、进入例外应用或安全输入期间，也会取消尚未完成的 Shift 单按。
+### 中英文切换
 
-Shift 与 Ctrl+空格使用同一组输入法，记住最近使用的中文与英文输入法，不会顺次遍历日文等其他输入法。需要在系统中同时启用中文输入法和英文 / ABC 输入法。这里切换的是系统输入源，不是第三方输入法内部的中英模式。
+单按左或右 Shift，并在半秒内松开，即可切换中英文。Shift+字母仍可输入大写，Shift+方向键仍可选择文字；长按 Shift 或搭配其他按键、鼠标操作时不会切换输入法。
 
-要让 Caps Lock 只切换大小写，请在「系统设置 → 键盘 → 文字输入 → 编辑 → 所有输入法」中关闭「使用大写锁定键切换 ABC 输入法」。应用透传 Caps Lock，不会替你改写这项系统设置。
+请先在系统中同时添加中文输入法和英文 / ABC 输入法。应用会记住最近使用的中文与英文输入法，不会轮流切换到日文等其他输入法。这里切换的是系统输入法，不是第三方输入法内部的中英模式。Shift 与 Ctrl+空格可以同时开启。
 
-映射在所有非例外应用中生效，功能由目标应用的 Mac 快捷键决定。例如 Command+Shift+S 在部分应用中是「复制文档」。Alt+Tab 切换的是应用，不是 Windows 风格的每个独立窗口。菜单显示的快捷键仍由原应用提供，不会被本工具改写。
+### 大小写与中英文的独立开关
 
-## 应用例外与恢复
+设置中的「大小写与中英文」包含三个分别保存的开关，每项都有自己的前提说明和「打开键盘设置」按钮：
 
-终端、iTerm2、Warp、Windows App / Microsoft 远程桌面、Parallels、VMware、AnyDesk、TeamViewer 默认暂停全部映射及 Command 拦截。可在设置中移除例外，或通过菜单栏暂停最近使用的应用。
+- **Caps Lock 切换大小写**：默认开启。请先在「系统设置 → 键盘 → 文字输入 → 编辑 → 所有输入法」中关闭「使用大写锁定键切换 ABC 输入法」，使 Caps Lock 只控制大小写。关闭本应用的开关后，会屏蔽生效应用中的大写锁定，Shift+字母仍可输入大写；键盘指示灯仍由系统管理。
+- **Shift 切换中英文**：默认开启。前提是系统中同时添加中文输入法和英文 / ABC 输入法。
+- **Ctrl+空格切换中英文**：默认关闭。同样需要同时添加中文输入法和英文 / ABC 输入法；与 Shift 使用同一组输入法，可以分别或同时开启。
 
-VS Code 集成终端与编辑器属于同一应用，目前无法按内部焦点区分。需要在集成终端使用 Ctrl+C 中断进程时，可暂停 VS Code 的映射。
+这些开关仅在快捷键已启用且当前应用未暂停映射时生效；暂停、退出或进入例外应用后，Caps Lock 恢复系统行为。
 
-监听在应用内独立线程运行，超时会尝试恢复；一分钟内多次失效会停止并提示检查。安全输入期间暂停转换。暂停会完成已按下按键的松键配对，然后保留系统原始行为。退出后停止监听。应用不修改系统修饰键设置，不创建自定义 LaunchAgent。
+### 应用例外
 
-## 构建与测试
+终端、iTerm2、Warp、Windows App / Microsoft 远程桌面、Parallels、VMware、AnyDesk、TeamViewer 默认暂停快捷键替换，避免影响终端操作、远程控制或虚拟机。你可以在设置中调整例外名单，也可以通过菜单栏暂停最近使用的应用。
 
-需要 macOS 13+、Xcode Command Line Tools 和 Swift 编译器。输出为当前 Mac 的 CPU 架构；当前开发验证环境为 Apple Silicon / macOS 26，其他系统和硬件尚需实机验证。
+VS Code 的编辑器和集成终端共用同一套规则。如果需要在集成终端用 Ctrl+C 中断命令，请暂停 VS Code 的快捷键替换。
 
-```sh
-# 只运行快捷键与状态机测试
-bash scripts/test.sh
+## 安全与隐私
 
-# 运行测试、编译、生成图标、临时签名及验证，输出到 release/WinKeyForMac.app
-bash scripts/build.sh
+- **本地运行**：不发送网络请求，不读取剪贴板，不记录或保存输入内容；功能开关和应用例外等偏好保存在本机。
+- **权限用途**：需要辅助功能权限来识别和替换快捷键。这是可控制其他应用的系统权限，请只向可信来源的应用授权。
+- **密码输入**：macOS 开启安全输入时，应用会暂停快捷键替换。
+- **随时恢复**：出现快捷键冲突或异常时，可从菜单栏暂停或退出；退出后恢复系统原有快捷键。应用不会替你修改系统的 Control / Command 设置。
+- **安装提示**：当前应用尚未经过 Apple 开发者身份认证和公证，macOS 可能显示安全提示。确认应用来源可信后，可到「系统设置 → 隐私与安全性」中选择「仍要打开」；移动或更新应用后，可能需要重新授权。
+- **卸载**：先关闭「登录启动」并退出应用，再从「应用程序」文件夹中删除；可在系统设置中撤销相关权限。
 
-# 或指定输出位置
-bash scripts/build.sh /absolute/path/WinKeyForMac.app
-```
+## 开源协议
 
-编译明确以 macOS 13 为最低部署版本。过程文件位于 `.work/`，打包产物统一放在 `release/`；这两个目录均被 Git 忽略。应用包与压缩包不纳入版本管理，源码、图标生成脚本及测试保留在 Git 中，可从全新检出重新构建。
-
-测试覆盖 Windows 组合转换、对应 Command 组合拦截、长按及松键配对、暂停与前台变化、各组开关、Alt+Tab 修饰键释放、Shift 单按与组合键区分、Ctrl+空格去重、中英文输入源选择和导航。真实键盘、权限、不同应用及睡眠唤醒需要实机验证。
-
-当前构建使用本机临时签名，尚未进行 Developer ID 签名和公证。重新编译或移动应用后，macOS 可能要求重新授权辅助功能。正式分发仍需稳定签名和更多兼容性验证。
-
-## English
-
-WinKeyForMac is a native macOS menu bar app for Windows-style shortcuts. It replaces selected shortcuts rather than adding aliases: Ctrl+C copies while the corresponding Command+C is blocked. Pause, per-group toggles and app exclusions restore native behavior. It runs locally in one process, with no driver, helper service, clipboard access or keystroke recording. Build with `bash scripts/build.sh` on macOS 13 or later.
+本项目采用 [MIT 协议](LICENSE)，允许使用、修改和分发，包括商业用途；分发时须保留版权与许可声明。软件按原样提供，不作担保。

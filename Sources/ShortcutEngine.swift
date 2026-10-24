@@ -2,6 +2,7 @@ import Foundation
 
 struct Modifiers: OptionSet, Equatable {
     let rawValue: UInt64
+    static let capsLock = Modifiers(rawValue: 1 << 16)
     static let shift = Modifiers(rawValue: 1 << 17)
     static let control = Modifiers(rawValue: 1 << 18)
     static let option = Modifiers(rawValue: 1 << 19)
@@ -24,9 +25,9 @@ struct ShortcutOptions {
     var common = true
     var browser = true
     var navigation = false
-    var appSwitch = true
     var inputSwitch = false
     var shiftInputSwitch = true
+    var capsLockCase = true
 }
 
 struct KeyDecision {
@@ -34,8 +35,6 @@ struct KeyDecision {
     var modifiers: Modifiers
     var consume = false
     var switchInput = false
-    // A modifier event must precede the first Tab, so the native switcher stays open.
-    var commandTransition: Bool? = nil
 }
 
 /// Pure state machine. No permission checks, disk I/O, app discovery or UI work here.
@@ -83,53 +82,26 @@ final class ShortcutEngine {
     private var heldKeys: Set<UInt16> = []
     private var shiftWasDown = false
     private var shiftTap: (code: UInt16, timestamp: UInt64)?
-    private(set) var switchingApps = false
-
-    var hasHeldMappings: Bool { !pressed.isEmpty || switchingApps }
-
-    @discardableResult
-    func finishAppSwitch() -> Bool {
-        let release = switchingApps
-        switchingApps = false
-        return release
-    }
+    var hasHeldMappings: Bool { !pressed.isEmpty }
 
     func cancelShiftTap() { shiftTap = nil }
 
-    /// Returns whether a synthetic Command release is required by the adapter.
-    @discardableResult
-    func reset() -> Bool {
-        let release = finishAppSwitch()
+    func reset() {
         // Key-up pairing survives foreground changes via process(), rather than reset().
         pressed.removeAll()
         heldKeys.removeAll()
         shiftWasDown = false
         cancelShiftTap()
-        return release
     }
 
-    func process(_ key: KeyInput, options: ShortcutOptions, active: Bool) -> KeyDecision {
+    func process(_ input: KeyInput, options: ShortcutOptions, active: Bool) -> KeyDecision {
+        var key = input
+        if active && !options.capsLockCase { key.modifiers.remove(.capsLock) }
         var result = KeyDecision(code: key.code, modifiers: key.modifiers)
         let relevant = key.modifiers.intersection(.relevant)
         result.switchInput = trackShiftTap(key, options: options, active: active)
 
-        if switchingApps, key.modifiers.contains(.option) {
-            result.modifiers.remove(.option)
-            result.modifiers.insert(.command)
-        }
-
-        if key.phase == .flags {
-            if switchingApps {
-                if key.modifiers.contains(.option) {
-                    result.modifiers.remove(.option)
-                    result.modifiers.insert(.command)
-                } else {
-                    switchingApps = false
-                    result.commandTransition = false
-                }
-            }
-            return result
-        }
+        if key.phase == .flags { return result }
 
         // Pair key-up/repeat with its original key-down even after focus/option changes.
         if let mapping = pressed[key.code] {
@@ -138,10 +110,7 @@ final class ShortcutEngine {
             result.consume = mapping.consume
             if let replacement = mapping.replacement {
                 result.modifiers.remove([.control, .option, .command])
-                // Releasing Alt before Tab must not reintroduce Command on Tab-up.
-                if mapping.code != 48 || switchingApps {
-                    result.modifiers.formUnion(replacement)
-                }
+                result.modifiers.formUnion(replacement)
             }
             return result
         }
@@ -153,23 +122,10 @@ final class ShortcutEngine {
         let replacesCommand = relevant.contains(.command) && (
             (options.common && Self.commonRules.contains { $0.targetCode == key.code && $0.targetModifiers == relevant }) ||
             (options.browser && Self.browserRules.contains { $0.targetCode == key.code && $0.targetModifiers == relevant }) ||
-            (options.navigation && Self.navigationRules.contains { $0.targetCode == key.code && $0.targetModifiers == relevant }) ||
-            (options.appSwitch && key.code == 48 && (relevant == .command || relevant == [.command, .shift])))
+            (options.navigation && Self.navigationRules.contains { $0.targetCode == key.code && $0.targetModifiers == relevant }))
         if replacesCommand {
             result.consume = true
             pressed[key.code] = PressedMapping(code: key.code, replacement: nil, consume: true)
-            return result
-        }
-
-        if options.appSwitch, key.code == 48,
-           relevant == .option || relevant == [.option, .shift] {
-            if !switchingApps {
-                switchingApps = true
-                result.commandTransition = true
-            }
-            result.modifiers.remove(.option)
-            result.modifiers.insert(.command)
-            pressed[key.code] = PressedMapping(code: 48, replacement: .command, consume: false)
             return result
         }
 

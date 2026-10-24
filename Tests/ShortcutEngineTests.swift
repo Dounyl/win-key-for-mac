@@ -1,4 +1,5 @@
 import Foundation
+import CoreGraphics
 
 @main
 enum ShortcutEngineTests {
@@ -77,35 +78,37 @@ enum ShortcutEngineTests {
         check(release.code == 6 && release.modifiers == [.command, .shift], "Key-up remains paired after Ctrl release/pause")
         check(!pairing.hasHeldMappings, "Key-up clears mapping")
 
-        let disabledWhileHeld = ShortcutEngine()
-        _ = disabledWhileHeld.process(input(16, .control), options: options, active: true)
-        _ = disabledWhileHeld.finishAppSwitch()
-        let afterDisable = disabledWhileHeld.process(input(16, [], .up), options: options, active: false)
-        check(afterDisable.code == 6, "Disabling app switching preserves other held key-up pairs")
+        for modifier: Modifiers in [.command, .option, .control] {
+            for shifted in [false, true] {
+                let modifiers: Modifiers = shifted ? modifier.union(.shift) : modifier
+                let modifierCode: UInt16 = modifier == .command ? 55 : (modifier == .option ? 58 : 59)
+                let tab = ShortcutEngine()
+                let events = [input(modifierCode, modifier, .flags),
+                              input(48, modifiers), input(48, modifiers, repeatKey: true),
+                              input(48, modifiers, .up), input(48, modifiers),
+                              input(modifierCode, [], .flags), input(48, [], .up)]
+                for (index, event) in events.enumerated() {
+                    // A foreground change during switching must preserve native release events.
+                    let result = tab.process(event, options: options, active: index < 5)
+                    check(result.code == event.code && result.modifiers == event.modifiers &&
+                          !result.consume && !result.switchInput,
+                          "Tab chord and modifier releases pass through unchanged: \(modifiers), event \(index)")
+                }
+                check(!tab.hasHeldMappings, "Native Tab chords never create remapped keys")
+            }
+        }
 
-        let alt = ShortcutEngine()
-        let firstTab = alt.process(input(48, .option), options: options, active: true)
-        check(firstTab.modifiers == .command && firstTab.commandTransition == true, "Alt+Tab starts held Command")
-        _ = alt.process(input(48, .option, .up), options: options, active: true)
-        let secondTab = alt.process(input(48, [.option, .shift]), options: options, active: true)
-        check(secondTab.modifiers == [.command, .shift] && secondTab.commandTransition == nil, "Shift reverses without duplicate Command-down")
-        let altUp = alt.process(input(58, [], .flags), options: options, active: false)
-        check(altUp.commandTransition == false && !alt.switchingApps, "Alt-up releases Command even after foreground exclusion")
-        let tabUp = alt.process(input(48, [], .up), options: options, active: true)
-        check(!tabUp.modifiers.contains(.command), "Tab-up after Alt-up cannot reintroduce Command")
-        check(!alt.reset(), "Reset after clean release sends no extra Command-up")
+        let tabDuringMapping = ShortcutEngine()
+        _ = tabDuringMapping.process(input(16, .control), options: options, active: true)
+        _ = tabDuringMapping.process(input(48, .command), options: options, active: true)
+        let afterAppSwitch = tabDuringMapping.process(input(16, [], .up), options: options, active: false)
+        check(afterAppSwitch.code == 6 && afterAppSwitch.modifiers == [.command, .shift],
+              "Native app switching preserves other held key-up pairs")
 
         let interrupted = ShortcutEngine()
-        _ = interrupted.process(input(48, .option), options: options, active: true)
-        check(interrupted.reset(), "Stopping during Alt+Tab requires Command release")
-        check(!interrupted.hasHeldMappings, "Stopping clears held keys")
-
-        let native = ShortcutEngine().process(input(48, .command), options: options, active: true)
-        check(native.consume && native.commandTransition == nil, "Native Command+Tab disabled")
-        check(ShortcutEngine().process(input(48, [.command, .shift]), options: options, active: true).consume,
-              "Native Command+Shift+Tab disabled")
-        let ctrlTab = ShortcutEngine().process(input(48, .control), options: options, active: true)
-        check(ctrlTab.modifiers == .control, "Ctrl+Tab preserves tab cycling")
+        _ = interrupted.process(input(8, .control), options: options, active: true)
+        interrupted.reset()
+        check(!interrupted.hasHeldMappings, "Stopping clears held mappings")
 
         var inputOptions = options
         inputOptions.inputSwitch = true
@@ -207,7 +210,7 @@ enum ShortcutEngineTests {
               "Disabling the Shift option cancels its pending tap")
         let resetShift = ShortcutEngine()
         _ = resetShift.process(input(56, .shift, .flags), options: options, active: true)
-        _ = resetShift.reset()
+        resetShift.reset()
         check(!resetShift.process(input(56, [], .flags), options: options, active: true).switchInput,
               "Stopping/sleep reset cancels the pending tap")
 
@@ -215,6 +218,86 @@ enum ShortcutEngineTests {
             let capsEvent = ShortcutEngine().process(input(57, flags, .flags), options: inputOptions, active: true)
             check(!capsEvent.consume && !capsEvent.switchInput && capsEvent.modifiers == flags,
                   "Caps Lock is forwarded unchanged, without an input-source request")
+        }
+        // All eight configurations must keep case control separate from both input gestures.
+        for caseEnabled in [false, true] {
+            for shiftEnabled in [false, true] {
+                for spaceEnabled in [false, true] {
+                    var independent = options
+                    independent.capsLockCase = caseEnabled
+                    independent.shiftInputSwitch = shiftEnabled
+                    independent.inputSwitch = spaceEnabled
+                    let engine = ShortcutEngine()
+                    let expectedCaps: Modifiers = caseEnabled ? caps : []
+                    let capsOn = engine.process(input(57, caps, .flags), options: independent, active: true)
+                    check(capsOn.modifiers == expectedCaps && !capsOn.switchInput && !capsOn.consume,
+                          "Caps Lock case follows only its own switch")
+                    for phase: KeyPhase in [.down, .up] {
+                        let letter = engine.process(input(0, caps, phase), options: independent, active: true)
+                        check(letter.modifiers == expectedCaps && !letter.consume && !letter.switchInput,
+                              "Case setting applies to letter down and up")
+                    }
+                    _ = engine.process(input(56, [.shift, caps], .flags), options: independent, active: true)
+                    let capital = engine.process(input(0, [.shift, caps]), options: independent, active: true)
+                    check(capital.modifiers == expectedCaps.union(.shift) && !capital.switchInput,
+                          "Shift can type capitals independently of Caps Lock")
+                    _ = engine.process(input(0, [.shift, caps], .up), options: independent, active: true)
+                    _ = engine.process(input(56, caps, .flags), options: independent, active: true)
+                    _ = engine.process(input(56, [.shift, caps], .flags), options: independent, active: true)
+                    let shiftUp = engine.process(input(56, caps, .flags), options: independent, active: true)
+                    check(shiftUp.switchInput == shiftEnabled && shiftUp.modifiers == expectedCaps,
+                          "Shift language switch is independent of Caps Lock and Ctrl+Space")
+                    let spaceDown = engine.process(input(49, [.control, caps]), options: independent, active: true)
+                    check(spaceDown.switchInput == spaceEnabled && spaceDown.consume == spaceEnabled,
+                          "Ctrl+Space language switch is independent of Caps Lock and Shift")
+                    _ = engine.process(input(49, [], .up), options: independent, active: true)
+                    for event in [input(57, caps, .flags), input(0, caps), input(0, caps, .up)] {
+                        let pausedCaps = engine.process(event, options: independent, active: false)
+                        check(pausedCaps.modifiers == caps && !pausedCaps.switchInput && !pausedCaps.consume,
+                              "Pause/exclusion restores native Caps Lock")
+                    }
+                    let copy = engine.process(input(8, [.control, caps]), options: independent, active: true)
+                    check(copy.modifiers == expectedCaps.union(.command),
+                          "Shortcut remapping respects the independent case switch")
+                    _ = engine.process(input(8, [], .up), options: independent, active: true)
+                    let capsOff = engine.process(input(57, [], .flags), options: independent, active: true)
+                    check(capsOff.modifiers.isEmpty && !capsOff.switchInput,
+                          "Caps Lock off never triggers a language switch")
+                }
+            }
+        }
+        var caseOff = options
+        caseOff.capsLockCase = false
+        let caseChangedWhileHeld = ShortcutEngine()
+        _ = caseChangedWhileHeld.process(input(8, [.control, caps]), options: options, active: true)
+        check(caseChangedWhileHeld.process(input(8, caps, .up), options: caseOff, active: true).modifiers == .command,
+              "Disabling case while a mapped key is held suppresses Caps Lock on release")
+        check(ShortcutEngine().process(input(8, [.command, caps]), options: caseOff, active: true).consume,
+              "Disabling case preserves native Command shortcut blocking")
+        for (modifiers, active, expectedText) in [
+            (caps, true, "a"), (caps, false, "A"),
+            (caps.union(.shift), true, "A"), (caps.union(.option), true, "A"),
+            (caps.union(.command), true, "A")
+        ] {
+            for phase: KeyPhase in [.down, .up] {
+                let key = input(0, modifiers, phase)
+                let decision = ShortcutEngine().process(key, options: caseOff, active: active)
+                let event = CGEvent(keyboardEventSource: nil, virtualKey: key.code, keyDown: phase == .down)!
+                event.flags = CGEventFlags(rawValue: modifiers.rawValue)
+                let originalText = Array("A".utf16)
+                originalText.withUnsafeBufferPointer {
+                    event.keyboardSetUnicodeString(stringLength: $0.count, unicodeString: $0.baseAddress)
+                }
+                EventMonitor.apply(decision, to: event, input: key)
+                var characters = [UniChar](repeating: 0, count: 8)
+                var length = 0
+                event.keyboardGetUnicodeString(maxStringLength: characters.count, actualStringLength: &length,
+                                               unicodeString: &characters)
+                check(String(utf16CodeUnits: characters, count: length) == expectedText,
+                      "Cached event text respects case suppression, Shift, shortcuts and pause")
+                check(event.flags.contains(.maskAlphaShift) == !active,
+                      "Event Caps Lock flag matches the case decision")
+            }
         }
         let capsShift = ShortcutEngine()
         _ = capsShift.process(input(56, [.shift, caps], .flags), options: options, active: true)
@@ -272,7 +355,7 @@ enum ShortcutEngineTests {
               "Option word navigation remains available")
 
         var off = options
-        off.common = false; off.browser = false; off.appSwitch = false
+        off.common = false; off.browser = false
         for code: UInt16 in [8, 13, 3, 16, 17, 37] {
             let result = ShortcutEngine().process(input(code, .control), options: off, active: true)
             check(result.modifiers == .control && result.code == code, "Feature switch disables mapping \(code)")

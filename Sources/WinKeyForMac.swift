@@ -9,9 +9,9 @@ final class SettingsModel: ObservableObject {
     @Published var common = true
     @Published var browser = true
     @Published var navigation = false
-    @Published var appSwitch = true
     @Published var inputSwitch = false
     @Published var shiftInputSwitch = true
+    @Published var capsLockCase = true
     @Published var restoredModifiers = false
     @Published var accessibility = false
     @Published var running = false
@@ -47,9 +47,9 @@ final class SettingsModel: ObservableObject {
         common = savedBool("common", default: true)
         browser = savedBool("browser", default: true)
         navigation = savedBool("navigation", default: false)
-        appSwitch = savedBool("appSwitch", default: true)
         inputSwitch = savedBool("inputSwitch", default: false)
         shiftInputSwitch = savedBool("shiftInputSwitch", default: true)
+        capsLockCase = savedBool("capsLockCase", default: true)
         restoredModifiers = defaults.bool(forKey: "restoredModifiers")
         exclusions = defaults.dictionary(forKey: "exclusions") as? [String: String] ?? [
             "com.apple.Terminal": "终端", "com.googlecode.iterm2": "iTerm2",
@@ -110,8 +110,9 @@ final class SettingsModel: ObservableObject {
 
     func saveRules() {
         for (key, value) in [("common", common), ("browser", browser), ("navigation", navigation),
-                             ("appSwitch", appSwitch), ("inputSwitch", inputSwitch),
+                             ("inputSwitch", inputSwitch),
                              ("shiftInputSwitch", shiftInputSwitch),
+                             ("capsLockCase", capsLockCase),
                              ("restoredModifiers", restoredModifiers)] { defaults.set(value, forKey: key) }
         if !restoredModifiers && enabled { setEnabled(false) }
         syncMonitor()
@@ -153,7 +154,8 @@ final class SettingsModel: ObservableObject {
     private func syncMonitor() {
         monitor.update(MonitorSnapshot(
             options: ShortcutOptions(common: common, browser: browser, navigation: navigation,
-                                     appSwitch: appSwitch, inputSwitch: inputSwitch, shiftInputSwitch: shiftInputSwitch),
+                                     inputSwitch: inputSwitch, shiftInputSwitch: shiftInputSwitch,
+                                     capsLockCase: capsLockCase),
             enabled: enabled, excluded: excluded, suspended: secureInput || !accessibility, frontAppID: frontID))
     }
 
@@ -278,16 +280,34 @@ struct SettingsView: View {
                     Divider()
                     ruleToggle("浏览器与标签页", detail: "Ctrl+T / L / R / 1–9 / 0 / + / −，Ctrl+Shift+T", value: $model.browser)
                     Divider()
-                    ruleToggle("切换应用", detail: "Alt（Option）+Tab；加 Shift 反向切换，松开 Alt 确认", value: $model.appSwitch)
-                    Divider()
-                    ruleToggle("Shift 切换中英文", detail: "单按并松开左 / 右 Shift；组合键、鼠标操作和长按不触发", value: $model.shiftInputSwitch)
-                    Divider()
-                    ruleToggle("Ctrl+空格切换中英文", detail: "保留 Ctrl+空格；与 Shift 使用同一组中文和英文 / ABC 输入法", value: $model.inputSwitch)
-                    Text("Caps Lock 用于切换大小写。请在系统键盘设置中关闭“使用大写锁定键切换 ABC 输入法”。")
-                        .font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("切换应用")
+                        Text("Command（⌘）+Tab；加 Shift 反向切换，松开 Command 确认。保留系统快捷键。")
+                            .font(.caption).foregroundStyle(.secondary)
+                    }
                     Divider()
                     ruleToggle("按词移动与删除", detail: "Ctrl+← / → / Backspace；Ctrl+Home / End 到文首或文尾", value: $model.navigation)
-                    Text("替换模式：仅保留列出的 Windows 手势，对应的 Command 组合会被禁用。暂停或进入例外应用后恢复；其他快捷键保持原样。")
+                    Text("替换模式：列出的 Ctrl 手势会替换对应的 Command 组合。Command+Tab 保留系统行为。暂停或进入例外应用后恢复；其他快捷键保持原样。")
+                        .font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+                }
+
+                card {
+                    Text("大小写与中英文").font(.headline)
+                    inputRuleToggle("Caps Lock 切换大小写",
+                        detail: "开启时保留大写锁定；关闭时屏蔽大写锁定，Shift+字母仍可输入大写。",
+                        prerequisite: "前提：在“键盘 → 文字输入 → 编辑 → 所有输入法”中关闭“使用大写锁定键切换 ABC 输入法”，使 Caps Lock 只控制大小写。",
+                        value: $model.capsLockCase)
+                    Divider()
+                    inputRuleToggle("Shift 切换中英文",
+                        detail: "单按左 / 右 Shift，并在半秒内松开；组合键、鼠标操作和长按不触发。",
+                        prerequisite: "前提：在“键盘 → 文字输入 → 编辑”中同时添加中文输入法和英文 / ABC 输入法。切换系统输入法，不切换第三方输入法内部的中英模式。",
+                        value: $model.shiftInputSwitch)
+                    Divider()
+                    inputRuleToggle("Ctrl+空格切换中英文",
+                        detail: "按 Ctrl+空格切换，可与 Shift 方案分别开启；长按只切换一次。",
+                        prerequisite: "前提：在“键盘 → 文字输入 → 编辑”中同时添加中文输入法和英文 / ABC 输入法。与 Shift 使用同一组输入法。",
+                        value: $model.inputSwitch)
+                    Text("三个开关分别保存；仅在快捷键已启用且当前应用未暂停映射时生效。")
                         .font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
                 }
 
@@ -350,6 +370,18 @@ struct SettingsView: View {
         }.toggleStyle(.switch)
     }
 
+    private func inputRuleToggle(_ title: String, detail: String, prerequisite: String,
+                                 value: Binding<Bool>) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            ruleToggle(title, detail: detail, value: value)
+            Text(prerequisite)
+                .font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+            Button("打开键盘设置…") { model.openKeyboardSettings() }
+                .controlSize(.small)
+                .accessibilityLabel("\(title)：打开键盘设置")
+        }
+    }
+
     private func card<Content: View>(@ViewBuilder _ content: () -> Content) -> some View {
         VStack(alignment: .leading, spacing: 13, content: content)
             .padding(17).frame(maxWidth: .infinity, alignment: .leading)
@@ -383,9 +415,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
             image?.size = NSSize(width: 18, height: 18)
             image?.isTemplate = true
             button.image = image
-            button.imagePosition = .imageLeading
-            button.title = " WK"
-            button.font = .systemFont(ofSize: 11, weight: .semibold)
+            button.imagePosition = .imageOnly
+            button.title = ""
             button.setAccessibilityLabel("WinKeyForMac · 打开快捷键菜单")
         }
         item.button?.toolTip = "WinKeyForMac · \(model.statusTitle)"
