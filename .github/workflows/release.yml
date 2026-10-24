@@ -1,0 +1,110 @@
+name: Build and Release
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Existing release tag matching Info.plist, e.g. v0.3.0'
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ inputs.tag || github.ref }}
+  cancel-in-progress: false
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  build:
+    name: Build ${{ matrix.architecture }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: macos-15
+            architecture: arm64
+          - runner: macos-15-intel
+            architecture: x86_64
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ inputs.tag && format('refs/tags/{0}', inputs.tag) || '' }}
+          persist-credentials: false
+      - name: Test, build and package
+        env:
+          RELEASE_TAG: ${{ inputs.tag || (startsWith(github.ref, 'refs/tags/') && github.ref_name) || '' }}
+          EXPECTED_ARCHITECTURE: ${{ matrix.architecture }}
+        run: |
+          test "$(uname -m)" = "$EXPECTED_ARCHITECTURE"
+          bash scripts/package.sh "$RELEASE_TAG"
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: package-${{ matrix.architecture }}
+          path: |
+            release/WinKeyForMac-*-macOS-${{ matrix.architecture }}.zip
+            release/WinKeyForMac-*-macOS-${{ matrix.architecture }}.zip.sha256
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 14
+
+  release:
+    name: Publish GitHub Release
+    if: github.event_name == 'workflow_dispatch' || startsWith(github.ref, 'refs/tags/v')
+    needs: build
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+      RELEASE_TAG: ${{ inputs.tag || github.ref_name }}
+    steps:
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          pattern: package-*
+          path: release
+          merge-multiple: true
+      - name: Verify both packages
+        working-directory: release
+        run: |
+          version="${RELEASE_TAG#v}"
+          for architecture in arm64 x86_64; do
+            archive="WinKeyForMac-$version-macOS-$architecture.zip"
+            test -s "$archive"
+            sha256sum --check "$archive.sha256"
+          done
+      - name: Create release and upload packages
+        run: |
+          mkdir -p .work
+          cat > .work/release-notes.md <<'NOTES'
+          ## 下载与安装
+
+          - Apple Silicon（M 系列）下载 `macOS-arm64.zip`；Intel Mac 下载 `macOS-x86_64.zip`。
+          - 解压后将 `WinKeyForMac.app` 放入「应用程序」目录，再打开并授予辅助功能权限。需要 macOS 13 或更新版本。
+          - 当前应用使用临时签名，尚未进行 Developer ID 签名和公证；如被系统阻止，请在「系统设置 → 隐私与安全性」中检查「仍要打开」。
+          - 可在下载目录运行 `shasum -a 256 -c <压缩包文件名>.sha256` 校验完整性。
+
+          两个 ZIP 均为可运行的应用包，GitHub 自动提供的 Source code 为源码。
+          NOTES
+          if ! gh release view "$RELEASE_TAG" > /dev/null 2>&1; then
+            gh release create "$RELEASE_TAG" --verify-tag --draft \
+              --title "WinKeyForMac $RELEASE_TAG" \
+              --notes-file .work/release-notes.md --generate-notes
+          fi
+          gh release upload "$RELEASE_TAG" release/*.zip release/*.sha256 --clobber
+          if [[ "$(gh release view "$RELEASE_TAG" --json isDraft --jq .isDraft)" == true ]]; then
+            gh release edit "$RELEASE_TAG" --draft=false
+          fi
