@@ -176,8 +176,6 @@ final class SettingsModel: ObservableObject {
     }
 
     func grantAccessibility() {
-        let options = [kAXTrustedCheckOptionPrompt.takeUnretainedValue() as String: true] as CFDictionary
-        _ = AXIsProcessTrustedWithOptions(options)
         openSettings("Privacy_Accessibility")
     }
 
@@ -224,7 +222,7 @@ struct SettingsView: View {
                         Text("熟悉的快捷键，带到 Mac。").font(.system(size: 14)).foregroundStyle(.secondary)
                     }
                     Spacer()
-                    Text("试用版 0.3.0").font(.caption).foregroundStyle(.secondary)
+                    Text("试用版 0.4.0").font(.caption).foregroundStyle(.secondary)
                 }
 
                 card {
