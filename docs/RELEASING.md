@@ -13,6 +13,7 @@
 | 标签 | 提交 | 应用版本 | 构建号 | GitHub Release |
 | --- | --- | --- | --- | --- |
 | `v0.3.0` | `377fecaa3dc2dee4f071a98420ba40ef5bfd9a74` | `0.3.0` | `5` | 已发布 |
+| `v0.4.0` | `8174a3e33c7a8fe8767e9ab879664f9b4afe99df` | `0.4.0` | `6` | 已发布 |
 
 该表是核对快照，实际发布时必须重新读取远端状态：
 
@@ -22,7 +23,9 @@ git ls-remote --tags origin
 git tag --list --sort=version:refname
 ```
 
-在此基线上，单纯修复的下一版为 `v0.3.1`，新增功能的下一版为 `v0.4.0`；构建号至少为 `6`。这两个版本尚未创建，不应复用现有 `v0.3.0` 标签。
+`v0.4.0` 包含 Caps Lock 独立开关、保留原生 Command+Tab 应用切换，以及打开授权设置时不再额外弹出辅助功能访问提示的修复。两个架构的构建与发布均已通过，四个附件已上传。
+
+在此基线上，单纯修复的下一版为 `v0.4.1`，新增功能的下一版为 `v0.5.0`；构建号至少为 `7`。这两个版本尚未创建，不应复用现有标签。
 
 ## 本地构建
 
@@ -39,7 +42,7 @@ bash scripts/build.sh
 bash scripts/package.sh
 
 # 发布前同时校验标签与应用版本一致
-bash scripts/package.sh v0.3.0
+bash scripts/package.sh v0.4.0
 ```
 
 可安装应用默认输出到 `release/WinKeyForMac.app`；发布包命名为 `release/WinKeyForMac-<版本>-macOS-<架构>.zip`，并附带同名 `.zip.sha256` 文件。`arm64` 对应 Apple Silicon，`x86_64` 对应 Intel。压缩包保留应用目录结构、文件元数据和可执行权限。
@@ -57,17 +60,17 @@ bash scripts/package.sh v0.3.0
 | 推送符合版本规则的 `v*` 标签 | 是 | 两种架构都成功后发布 |
 | 手动运行并指定已存在的标签 | 是，构建该标签对应的源码 | 上传或补全该版本 |
 
-手动执行时也遵循技能中的规则。例如，下一次修复版选定 `0.3.1` 后：
+手动执行时也遵循技能中的规则。例如，下一次修复版选定 `0.4.1` 后：
 
-1. 更新 `Info.plist` 的 `CFBundleShortVersionString` 为 `0.3.1`，`CFBundleVersion` 至少为 `6`，同步界面版本，验证并提交本次发布所需的全部源码、测试和配置。
+1. 更新 `Info.plist` 的 `CFBundleShortVersionString` 为 `0.4.1`，`CFBundleVersion` 至少为 `7`，同步界面版本，验证并提交本次发布所需的全部源码、测试和配置。
 2. 记录该次提交的准确 SHA，推送到 `main`，等待该 SHA 对应的主分支构建通过，再创建带说明的标签。以下变量必须填入实际已经验证的提交：
 
    ```sh
    release_commit="实际已验证的提交 SHA"
    git push origin "${release_commit}:refs/heads/main"
    # 等待上述提交的主分支 CI 成功后继续。
-   git tag -a v0.3.1 "$release_commit" -m "WinKeyForMac v0.3.1"
-   git push origin refs/tags/v0.3.1
+   git tag -a v0.4.1 "$release_commit" -m "WinKeyForMac v0.4.1"
+   git push origin refs/tags/v0.4.1
    ```
 
 3. GitHub Actions 检出标签对应源码，在两种架构的 macOS runner 上构建。标签必须严格等于 `v` 加应用版本，不一致时终止发布。
@@ -80,5 +83,5 @@ bash scripts/package.sh v0.3.0
 下载 ZIP 和对应的校验文件后，在下载目录执行：
 
 ```sh
-shasum -a 256 -c WinKeyForMac-0.3.0-macOS-arm64.zip.sha256
+shasum -a 256 -c WinKeyForMac-0.4.0-macOS-arm64.zip.sha256
 ```
