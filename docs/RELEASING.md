@@ -1,5 +1,29 @@
 # 构建与发布
 
+## 自动发布技能
+
+项目技能位于 [releasing-winkey](../.agents/skills/releasing-winkey/SKILL.md)。在本项目中说“发布一个版本”“发布当前修复”或“打 tag 发布”，即可让代理按实际改动选择版本，更新版本文件，完成验证、提交、标签推送并跟进 GitHub Release。也可显式调用 `$releasing-winkey`，或指定“发布 0.4.0”。
+
+版本递增、构建号、标签命名、发布范围和失败恢复规则统一维护在技能内。技能中的只读助手负责计算版本；真正发布需要执行完整技能流程。普通代码推送不会自动选择版本或创建标签。
+
+## 已有标签
+
+截至 **2026-10-25** 核对，本地和 GitHub 上均只有下列正式标签：
+
+| 标签 | 提交 | 应用版本 | 构建号 | GitHub Release |
+| --- | --- | --- | --- | --- |
+| `v0.3.0` | `377fecaa3dc2dee4f071a98420ba40ef5bfd9a74` | `0.3.0` | `5` | 已发布 |
+
+该表是核对快照，实际发布时必须重新读取远端状态：
+
+```sh
+git fetch origin --tags
+git ls-remote --tags origin
+git tag --list --sort=version:refname
+```
+
+在此基线上，单纯修复的下一版为 `v0.3.1`，新增功能的下一版为 `v0.4.0`；构建号至少为 `6`。这两个版本尚未创建，不应复用现有 `v0.3.0` 标签。
+
 ## 本地构建
 
 需要 macOS 13+ 和 Xcode Command Line Tools。应用版本由根目录的 `Info.plist` 中 `CFBundleShortVersionString` 决定。
@@ -26,14 +50,24 @@ bash scripts/package.sh v0.3.0
 
 [Build and Release](../.github/workflows/release.yml) 在推送 `main` 或提交 Pull Request 时分别构建 Apple Silicon 和 Intel 应用，运行测试、验证签名并打包。结果保留在 Actions Artifacts 中 14 天。
 
-正式发布步骤：
+| 触发方式 | 构建与测试 | 发布 GitHub Release |
+| --- | --- | --- |
+| 推送 `main` | 是 | 否 |
+| 向 `main` 提交 Pull Request | 是 | 否 |
+| 推送符合版本规则的 `v*` 标签 | 是 | 两种架构都成功后发布 |
+| 手动运行并指定已存在的标签 | 是，构建该标签对应的源码 | 上传或补全该版本 |
 
-1. 更新 `Info.plist` 的 `CFBundleShortVersionString`（例如 `0.3.0`）及 `CFBundleVersion`，提交并推送版本对应的所有源码。
-2. 给该提交创建对应标签并推送：
+手动执行时也遵循技能中的规则。例如，下一次修复版选定 `0.3.1` 后：
+
+1. 更新 `Info.plist` 的 `CFBundleShortVersionString` 为 `0.3.1`，`CFBundleVersion` 至少为 `6`，同步界面版本，验证并提交本次发布所需的全部源码、测试和配置。
+2. 记录该次提交的准确 SHA，推送到 `main`，等待该 SHA 对应的主分支构建通过，再创建带说明的标签。以下变量必须填入实际已经验证的提交：
 
    ```sh
-   git tag v0.3.0
-   git push origin v0.3.0
+   release_commit="实际已验证的提交 SHA"
+   git push origin "${release_commit}:refs/heads/main"
+   # 等待上述提交的主分支 CI 成功后继续。
+   git tag -a v0.3.1 "$release_commit" -m "WinKeyForMac v0.3.1"
+   git push origin refs/tags/v0.3.1
    ```
 
 3. GitHub Actions 检出标签对应源码，在两种架构的 macOS runner 上构建。标签必须严格等于 `v` 加应用版本，不一致时终止发布。
