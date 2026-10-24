@@ -1,4 +1,5 @@
 .work/
+/release/
 .DS_Store
 *.app/
 *.zip

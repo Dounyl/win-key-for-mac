@@ -2,7 +2,7 @@
 set -euo pipefail
 project_dir="$(cd "$(dirname "$0")/.." && pwd)"
 build_dir="$project_dir/.work"
-output_app="${1:-$project_dir/WinKeyForMac.app}"
+output_app="${1:-$project_dir/release/WinKeyForMac.app}"
 mkdir -p "$build_dir/module-cache" "$output_app/Contents/MacOS" "$output_app/Contents/Resources"
 bash "$project_dir/scripts/test.sh"
 swiftc -swift-version 5 -parse-as-library -O \

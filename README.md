@@ -53,14 +53,14 @@ VS Code 集成终端与编辑器属于同一应用，目前无法按内部焦点
 # 只运行快捷键与状态机测试
 bash scripts/test.sh
 
-# 运行测试、编译、生成图标、临时签名及验证
+# 运行测试、编译、生成图标、临时签名及验证，输出到 release/WinKeyForMac.app
 bash scripts/build.sh
 
 # 或指定输出位置
 bash scripts/build.sh /absolute/path/WinKeyForMac.app
 ```
 
-编译明确以 macOS 13 为最低部署版本。过程文件位于被 Git 忽略的 `.work/`，应用包与压缩包也被忽略。源码、图标生成脚本及测试均纳入版本管理，可从全新检出重新构建。
+编译明确以 macOS 13 为最低部署版本。过程文件位于 `.work/`，打包产物统一放在 `release/`；这两个目录均被 Git 忽略。应用包与压缩包不纳入版本管理，源码、图标生成脚本及测试保留在 Git 中，可从全新检出重新构建。
 
 测试覆盖 Windows 组合转换、对应 Command 组合拦截、长按及松键配对、暂停与前台变化、各组开关、Alt+Tab 修饰键释放、输入法切换去重和导航。真实键盘、权限、不同应用及睡眠唤醒需要实机验证。
 
