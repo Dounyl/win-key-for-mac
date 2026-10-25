@@ -274,6 +274,47 @@ enum ShortcutEngineTests {
               "Disabling case while a mapped key is held suppresses Caps Lock on release")
         check(ShortcutEngine().process(input(8, [.command, caps]), options: caseOff, active: true).consume,
               "Disabling case preserves native Command shortcut blocking")
+        // A Caps Lock indicator can be on while the event still carries cached lowercase text.
+        // Check the delivered text as well as flags; preserving flags alone misses this failure.
+        for (modifiers, active, caseEnabled, originalText, expectedText):
+            (Modifiers, Bool, Bool, String, String) in [
+                (caps, true, true, "a", "A"),
+                (caps, true, true, "A", "A"),
+                (caps, true, true, "é", "É"),
+                (caps, true, true, "你1!", "你1!"),
+                (caps, true, false, "A", "a"),
+                (caps, false, true, "a", "a"),
+                (caps, false, false, "A", "A"),
+                ([], true, true, "a", "a"),
+                ([caps, .shift], true, true, "a", "a"),
+                ([caps, .shift], true, false, "A", "A"),
+                ([caps, .control], true, true, "a", "a"),
+                ([caps, .command], true, true, "a", "a"),
+                ([caps, .option], true, true, "å", "å")
+            ] {
+            for phase: KeyPhase in [.down, .up] {
+                var caseOptions = options
+                caseOptions.capsLockCase = caseEnabled
+                let key = input(40, modifiers, phase)
+                let decision = ShortcutEngine().process(key, options: caseOptions, active: active)
+                let event = CGEvent(keyboardEventSource: nil, virtualKey: key.code, keyDown: phase == .down)!
+                event.flags = CGEventFlags(rawValue: modifiers.rawValue)
+                let original = Array(originalText.utf16)
+                original.withUnsafeBufferPointer {
+                    event.keyboardSetUnicodeString(stringLength: $0.count, unicodeString: $0.baseAddress)
+                }
+                EventMonitor.apply(decision, to: event, input: key)
+                var characters = [UniChar](repeating: 0, count: 16)
+                var length = 0
+                event.keyboardGetUnicodeString(maxStringLength: characters.count, actualStringLength: &length,
+                                               unicodeString: &characters)
+                check(String(utf16CodeUnits: characters, count: length) == expectedText,
+                      "Caps Lock delivers the selected case despite stale text, respecting pause and chords")
+                let expectedFlags = active && !caseEnabled ? modifiers.subtracting(.capsLock) : modifiers
+                check(event.flags.rawValue == expectedFlags.rawValue,
+                      "Correcting cached case preserves the selected event flags")
+            }
+        }
         for (modifiers, active, expectedText) in [
             (caps, true, "a"), (caps, false, "A"),
             (caps.union(.shift), true, "A"), (caps.union(.option), true, "A"),

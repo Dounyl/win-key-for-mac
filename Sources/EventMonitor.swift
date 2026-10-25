@@ -196,9 +196,9 @@ final class EventMonitor {
         if decision.modifiers != input.modifiers {
             event.flags = normalizedFlags(decision.modifiers)
         }
-        // Some clients use the event's cached text rather than translating its new flags.
-        // Keep that text consistent when Caps Lock is suppressed, preserving Shift and chords.
-        if input.modifiers.contains(.capsLock), !decision.modifiers.contains(.capsLock),
+        // Some clients use cached text even when it disagrees with the Caps Lock flag.
+        // Apply the active case rule to that text, preserving native Shift/chord behavior.
+        if let textCase = decision.textCase,
            decision.modifiers.intersection(.relevant).isEmpty,
            input.code == decision.code, input.phase == .down || input.phase == .up {
             var length = 0
@@ -207,8 +207,9 @@ final class EventMonitor {
                 var characters = [UniChar](repeating: 0, count: length)
                 event.keyboardGetUnicodeString(maxStringLength: length, actualStringLength: &length,
                                                unicodeString: &characters)
-                let lowercase = Array(String(utf16CodeUnits: characters, count: length).lowercased().utf16)
-                lowercase.withUnsafeBufferPointer {
+                let text = String(utf16CodeUnits: characters, count: length)
+                let converted = Array((textCase == .uppercase ? text.uppercased() : text.lowercased()).utf16)
+                converted.withUnsafeBufferPointer {
                     event.keyboardSetUnicodeString(stringLength: $0.count, unicodeString: $0.baseAddress)
                 }
             }

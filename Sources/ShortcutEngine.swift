@@ -30,11 +30,14 @@ struct ShortcutOptions {
     var capsLockCase = true
 }
 
+enum KeyTextCase { case uppercase, lowercase }
+
 struct KeyDecision {
     var code: UInt16
     var modifiers: Modifiers
     var consume = false
     var switchInput = false
+    var textCase: KeyTextCase?
 }
 
 /// Pure state machine. No permission checks, disk I/O, app discovery or UI work here.
@@ -99,6 +102,10 @@ final class ShortcutEngine {
         if active && !options.capsLockCase { key.modifiers.remove(.capsLock) }
         var result = KeyDecision(code: key.code, modifiers: key.modifiers)
         let relevant = key.modifiers.intersection(.relevant)
+        if active, input.modifiers.contains(.capsLock), relevant.isEmpty,
+           key.phase != .flags {
+            result.textCase = options.capsLockCase ? .uppercase : .lowercase
+        }
         result.switchInput = trackShiftTap(key, options: options, active: active)
 
         if key.phase == .flags { return result }
