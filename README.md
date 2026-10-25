@@ -4,6 +4,19 @@
 
 需要 **macOS 13 或更新版本**。
 
+## 界面预览
+
+常用快捷键设置（截图版本：0.3.0）：
+
+![WinKeyForMac 设置界面，展示快捷键启用状态、编辑与文件、浏览器与标签页及按词移动设置](docs/images/settings-shortcuts.png)
+
+<details>
+<summary>查看大小写、中英文切换与应用例外设置</summary>
+
+![WinKeyForMac 的 Caps Lock、Shift 和 Ctrl+空格独立开关，以及应用例外与登录启动设置](docs/images/settings-input.png)
+
+</details>
+
 ## 开始使用
 
 1. 将 `WinKeyForMac.app` 拖到「应用程序」文件夹，再打开。
@@ -67,10 +80,6 @@ VS Code 的编辑器和集成终端共用同一套规则。如果需要在集成
 - **随时恢复**：出现快捷键冲突或异常时，可从菜单栏暂停或退出；退出后恢复系统原有快捷键。应用不会替你修改系统的 Control / Command 设置。
 - **安装提示**：当前应用尚未经过 Apple 开发者身份认证和公证，macOS 可能显示安全提示。确认应用来源可信后，可到「系统设置 → 隐私与安全性」中选择「仍要打开」；移动或更新应用后，可能需要重新授权。
 - **卸载**：先关闭「登录启动」并退出应用，再从「应用程序」文件夹中删除；可在系统设置中撤销相关权限。
-
-## 项目维护
-
-版本选择、标签规则与自动发布流程见 [项目发布技能](.agents/skills/releasing-winkey/SKILL.md)，构建说明和已有标签记录见 [构建与发布](docs/RELEASING.md)。
 
 ## 开源协议
 
