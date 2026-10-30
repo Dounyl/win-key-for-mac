@@ -1,7 +1,6 @@
 import AppKit
 import SwiftUI
 import ApplicationServices
-import Carbon
 import ServiceManagement
 
 final class SettingsModel: ObservableObject {
@@ -15,7 +14,6 @@ final class SettingsModel: ObservableObject {
     @Published var restoredModifiers = false
     @Published var accessibility = false
     @Published var running = false
-    @Published var secureInput = false
     @Published var frontName = ""
     @Published var frontID = ""
     @Published var message = ""
@@ -34,12 +32,11 @@ final class SettingsModel: ObservableObject {
         if !enabled { return canEnable ? "已暂停" : "未启用" }
         if !accessibility { return "需要辅助功能权限" }
         if reportedFailure { return "需要检查" }
-        if secureInput { return "安全输入期间暂停" }
         if excluded { return "当前应用暂停映射" }
         return running ? "Windows 快捷键已启用" : "正在启动…"
     }
     var statusColor: Color {
-        if enabled && running && !excluded && !secureInput && !reportedFailure { return .green }
+        if enabled && running && !excluded && !reportedFailure { return .green }
         return enabled && reportedFailure ? .red : .orange
     }
 
@@ -126,7 +123,6 @@ final class SettingsModel: ObservableObject {
             reportedFailure = true
         }
         accessibility = granted
-        secureInput = IsSecureEventInputEnabled()
         running = monitor.isRunning
         syncMonitor()
         if enabled && granted && !reportedFailure {
@@ -156,7 +152,7 @@ final class SettingsModel: ObservableObject {
             options: ShortcutOptions(common: common, browser: browser, navigation: navigation,
                                      inputSwitch: inputSwitch, shiftInputSwitch: shiftInputSwitch,
                                      capsLockCase: capsLockCase),
-            enabled: enabled, excluded: excluded, suspended: secureInput || !accessibility, frontAppID: frontID))
+            enabled: enabled, excluded: excluded, suspended: !accessibility, frontAppID: frontID))
     }
 
     func excludeCurrent() {
@@ -222,7 +218,7 @@ struct SettingsView: View {
                         Text("熟悉的快捷键，带到 Mac。").font(.system(size: 14)).foregroundStyle(.secondary)
                     }
                     Spacer()
-                    Text("试用版 0.4.1").font(.caption).foregroundStyle(.secondary)
+                    Text("试用版 0.4.2").font(.caption).foregroundStyle(.secondary)
                 }
 
                 card {
