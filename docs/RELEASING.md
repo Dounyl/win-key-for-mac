@@ -8,12 +8,14 @@
 
 ## 已有标签
 
-截至 **2026-10-25** 核对，本地和 GitHub 上均只有下列正式标签：
+截至 **2026-10-30** 核对，本地和 GitHub 上均有下列正式标签：
 
 | 标签 | 提交 | 应用版本 | 构建号 | GitHub Release |
 | --- | --- | --- | --- | --- |
 | `v0.3.0` | `377fecaa3dc2dee4f071a98420ba40ef5bfd9a74` | `0.3.0` | `5` | 已发布 |
 | `v0.4.0` | `8174a3e33c7a8fe8767e9ab879664f9b4afe99df` | `0.4.0` | `6` | 已发布 |
+| `v0.4.1` | `685135cf4de7e3258a8ab336e18663244553f958` | `0.4.1` | `7` | 已发布 |
+| `v0.4.2` | `eabde05fabba0fee2ee1cca0f3a9784d0806b8d7` | `0.4.2` | `8` | 已发布 |
 
 该表是核对快照，实际发布时必须重新读取远端状态：
 
@@ -25,7 +27,9 @@ git tag --list --sort=version:refname
 
 `v0.4.0` 包含 Caps Lock 独立开关、保留原生 Command+Tab 应用切换，以及打开授权设置时不再额外弹出辅助功能访问提示的修复。两个架构的构建与发布均已通过，四个附件已上传。
 
-在此基线上，单纯修复的下一版为 `v0.4.1`，新增功能的下一版为 `v0.5.0`；构建号至少为 `7`。这两个版本尚未创建，不应复用现有标签。
+`v0.4.1` 修复 Caps Lock 显示大写但仍输出小写的问题。`v0.4.2` 移除安全输入状态下应用主动暂停映射的规则，避免该规则使 Ctrl 粘贴短暂失效；系统自身的事件限制仍可能影响映射。`v0.4.2` 的主分支和标签构建均已通过，Apple Silicon、Intel 两个 ZIP 及各自 SHA-256 文件共四个附件已公开发布。
+
+在此基线上，单纯修复的下一版为 `v0.4.3`，新增功能的下一版为 `v0.5.0`；构建号至少为 `9`。这两个版本尚未创建，不应复用现有标签。
 
 ## 本地构建
 
@@ -60,17 +64,17 @@ bash scripts/package.sh v0.4.0
 | 推送符合版本规则的 `v*` 标签 | 是 | 两种架构都成功后发布 |
 | 手动运行并指定已存在的标签 | 是，构建该标签对应的源码 | 上传或补全该版本 |
 
-手动执行时也遵循技能中的规则。例如，下一次修复版选定 `0.4.1` 后：
+手动执行时也遵循技能中的规则。例如，下一次修复版选定 `0.4.3` 后：
 
-1. 更新 `Info.plist` 的 `CFBundleShortVersionString` 为 `0.4.1`，`CFBundleVersion` 至少为 `7`，同步界面版本，验证并提交本次发布所需的全部源码、测试和配置。
+1. 更新 `Info.plist` 的 `CFBundleShortVersionString` 为 `0.4.3`，`CFBundleVersion` 至少为 `9`，同步界面版本，验证并提交本次发布所需的全部源码、测试和配置。
 2. 记录该次提交的准确 SHA，推送到 `main`，等待该 SHA 对应的主分支构建通过，再创建带说明的标签。以下变量必须填入实际已经验证的提交：
 
    ```sh
    release_commit="实际已验证的提交 SHA"
    git push origin "${release_commit}:refs/heads/main"
    # 等待上述提交的主分支 CI 成功后继续。
-   git tag -a v0.4.1 "$release_commit" -m "WinKeyForMac v0.4.1"
-   git push origin refs/tags/v0.4.1
+   git tag -a v0.4.3 "$release_commit" -m "WinKeyForMac v0.4.3"
+   git push origin refs/tags/v0.4.3
    ```
 
 3. GitHub Actions 检出标签对应源码，在两种架构的 macOS runner 上构建。标签必须严格等于 `v` 加应用版本，不一致时终止发布。
